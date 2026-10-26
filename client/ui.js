@@ -133,7 +133,7 @@ function viewStudent() {
   const notes = myNotes(u.id);
   const tabs = [['agenda', 'Agenda'], ['minhas', 'Minhas aulas'], ['comprar', 'Comprar'], ...(S().gifts === false ? [] : [['presente', 'Presentear 🎁']]), ['conta', 'Conta']];
   const days = u.credits > 0 && u.expireAt ? Math.ceil((D(u.expireAt) - now) / 864e5) : null;
-  const attended = db.reservations.filter(r => r.userId === u.id && r.status === 'attended').length;
+  const stats = classStats(u.id, now), attended = stats.done;
   let body = '';
   if (ui.stab === 'agenda') body = studentAgenda(u);
   else if (ui.stab === 'minhas') body = studentMine(u);
@@ -141,8 +141,9 @@ function viewStudent() {
   else if (ui.stab === 'presente' && S().gifts !== false) body = studentGift(u);
   else body = studentAccount(u);
   return `${topbar()}<main class="wrap" style="padding-top:22px;padding-bottom:90px">
-  <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:18px"><div><p class="gold sm">Olá, ${esc(u.name.split(' ')[0])}</p><h1 style="font-size:1.9rem">Sua bike, seus créditos</h1>${attended ? `<p class="muted sm" style="margin-top:4px">${attended} ${attended === 1 ? 'aula feita' : 'aulas feitas'} 💪</p>` : ''}</div>
-    <div class="chip"><div><small class="muted xs">Créditos</small><br><b class="tab-num">${u.credits}</b>${days !== null && days <= 14 ? `<br><span class="warn xs">vencem em ${Math.max(days, 0)} dia(s)</span>` : ''}</div></div></div>
+  <div class="row" style="justify-content:space-between;align-items:flex-end;margin-bottom:18px"><div><p class="gold sm">Olá, ${esc(u.name.split(' ')[0])}</p><h1 style="font-size:1.9rem">Sua bike, seus créditos</h1>${stats.last ? `<p class="muted sm" style="margin-top:4px">Última aula: ${esc(fDate(stats.last))} 💪</p>` : ''}</div>
+    <div class="row" style="gap:10px"><div class="chip" data-stat="done"><div><small class="muted xs">Aulas feitas</small><br><b class="tab-num">${attended}</b></div></div>
+    <div class="chip" data-stat="credits"><div><small class="muted xs">Créditos</small><br><b class="tab-num">${u.credits}</b>${days !== null && days <= 14 ? `<br><span class="warn xs">vencem em ${Math.max(days, 0)} dia(s)</span>` : ''}</div></div></div></div>
   ${notes.length ? `<div class="card hl" style="margin-bottom:14px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div class="stack sm">${notes.map(n => `<p>🔔 <b>${esc(n.title)}</b> <span class="muted">— ${esc(n.body)}</span></p>`).join('')}</div><button class="linkbtn xs" style="flex:none" data-act="readnotes">Ok, entendi</button></div></div>` : ''}
   ${u.blocked ? '<div class="card bad" style="margin-bottom:14px;border-color:var(--bad)">Sua conta está bloqueada. Fale com o estúdio no WhatsApp.</div>' : ''}
   ${verifyBanner(u)}${offersBanner(u)}${nextBooking(u)}
@@ -175,10 +176,10 @@ function studentMine(u) {
   const now = new Date();
   const up = db.reservations.filter(r => r.userId === u.id && r.status === 'confirmed' && cls(r.classId) && cls(r.classId).active && D(cls(r.classId).start) > addDays(now, 0) - 36e5).sort((a, b) => D(cls(a.classId).start) - D(cls(b.classId).start));
   const wl = db.waitlist.filter(w => w.userId === u.id && cls(w.classId) && cls(w.classId).active && isFuture(cls(w.classId)));
-  const hist = db.reservations.filter(r => r.userId === u.id && ['attended', 'no_show'].includes(r.status) && cls(r.classId)).sort((a, b) => D(cls(b.classId).start) - D(cls(a.classId).start)).slice(0, 12);
+  const st = classStats(u.id, now), hist = db.reservations.filter(r => r.userId === u.id && cls(r.classId) && (isDone(r, cls(r.classId), now) || (r.status === 'no_show' && D(cls(r.classId).start) < now))).filter(r => !up.includes(r)).sort((a, b) => D(cls(b.classId).start) - D(cls(a.classId).start));
   return `<h2 class="day" style="margin-top:6px">Próximas</h2>${up.map(r => { const c = cls(r.classId); if (c.event) return eventItem(c, u); const ok = (D(c.start) - now) / 36e5 >= S().cancelHours; return `<article class="item"><div><p style="font:700 1.05rem var(--display)">${esc(c.title)}</p><p class="muted sm cap">${esc(fWhen(c.start))} · ${esc(c.instructor)}</p><p class="gold" style="font:700 1.3rem var(--display)">Bike ${r.bike}</p>${miniRoom(c, r.bike)}</div>${ok ? `<div class="row" style="gap:6px"><button class="btn-line btn-sm" data-act="change" data-id="${c.id}">Trocar bike</button><button class="btn-line btn-sm" data-act="cancel" data-id="${r.id}">Cancelar (devolve 1 crédito)</button></div>` : `<a class="btn-line btn-sm" target="_blank" rel="noopener" href="${waLink(S().whatsapp, `Oi! Preciso falar sobre minha aula de ${c.title} (${fWhen(c.start)}).`)}">Prazo de cancelamento passou</a>`}</article>`; }).join('') || '<div class="empty">Você ainda não tem aulas reservadas.</div>'}
   ${wl.length ? `<h2 class="day">Lista de espera</h2>${wl.map(w => { const c = cls(w.classId); const pos = db.waitlist.filter(x => x.classId === c.id && D(x.at) <= D(w.at)).length; return `<article class="item"><div><p>${esc(c.title)}</p><p class="muted sm cap">${esc(fWhen(c.start))} · ${w.offerUntil && D(w.offerUntil) > new Date() ? '🎉 vaga liberada — confirme até ' + fTime(w.offerUntil) : 'você é a ' + pos + 'ª na fila'}</p></div><button class="linkbtn bad" data-act="leavewait" data-id="${c.id}">Sair</button></article>`; }).join('')}` : ''}
-  ${hist.length ? `<h2 class="day">Histórico</h2>${hist.map(r => { const c = cls(r.classId); return `<article class="item"><span>${esc(c.title)} <span class="muted">· ${esc(fWhen(c.start))}</span></span><span class="${r.status === 'attended' ? 'ok' : 'bad'}">${r.status === 'attended' ? 'Presente' : 'Faltou'}</span></article>`; }).join('')}` : ''}`;
+  ${hist.length ? `<h2 class="day">Histórico · ${st.done} ${st.done === 1 ? 'aula feita' : 'aulas feitas'}${st.miss ? ` · ${st.miss} falta${st.miss === 1 ? '' : 's'}` : ''}</h2>${hist.slice(0, 30).map(r => { const c = cls(r.classId), no = r.status === 'no_show'; return `<article class="item"><span>${esc(c.title)} <span class="muted">· ${esc(fWhen(c.start))}${r.bike ? ' · bike ' + r.bike : ''}</span></span><span class="${no ? 'bad' : 'ok'}">${no ? 'Faltou' : '✔ Feita'}</span></article>`; }).join('')}${hist.length > 30 ? `<p class="muted xs" style="margin-top:8px">Mostrando as 30 mais recentes.</p>` : ''}` : ''}`;
 }
 function studentBuy(u) {
   const pk = db.packages.filter(p => p.active).sort((a, b) => a.sort - b.sort);

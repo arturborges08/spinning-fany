@@ -12,7 +12,7 @@ let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m);
   const login = async (p, email, pw) => { await p.goto(h.base + '/#/entrar'); await p.waitForSelector('form[data-form=login]'); await p.fill('form[data-form=login] input[name=email]', email); await p.fill('form[data-form=login] input[name=password]', pw); await p.click('form[data-form=login] button[type=submit]'); };
   const CPFS = { 'ana@email.com': '529.982.247-25', 'bia@email.com': '111.444.777-35' };
   const signup = async (p, name, email, phone, pw) => { await p.goto(h.base + '/#/entrar'); await p.click('[data-act=authmode][data-m=signup]'); await p.fill('input[name=name]', name); await p.fill('input[name=email]', email); await p.fill('input[name=cpf]', CPFS[email]); await p.fill('input[name=phone]', phone); await p.fill('input[name=password]', pw); await p.check('input[name=terms]'); await p.click('form[data-form=signup] button[type=submit]'); };
-  const credits = async p => Number((await p.locator('.chip b').innerText()).trim());
+  const credits = async p => Number((await p.locator('[data-stat=credits] b').innerText()).trim());
 
   /* ═══ 1. site público e cadastro ═══ */
   const ana = await mk(); await ana.goto(h.base); await ana.waitForSelector('.hero');

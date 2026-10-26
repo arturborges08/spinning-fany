@@ -46,6 +46,19 @@ const waLink = (phone, text) => `https://wa.me/${normPhone(phone)}${text ? '?tex
 const fill = (tpl, v) => tpl.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ''));
 const cls = id => db.classes.find(c => c.id === id);
 const usr = id => db.users.find(u => u.id === id);
+/** reserva que conta como "aula feita": a aula já começou e a aluna estava nela (presente, ou reservada sem falta marcada) */
+const isDone = (r, c, now = new Date()) => !!c && D(c.start) < now && (r.status === 'attended' || (r.status === 'confirmed' && !r.holdUntil && c.active));
+/** números de uma aluna: aulas feitas, faltas, próximas reservadas e data da última aula */
+function classStats(userId, now = new Date()) {
+  let done = 0, miss = 0, next = 0, last = null;
+  for (const r of db.reservations) {
+    if (r.userId !== userId) continue; const c = cls(r.classId); if (!c) continue;
+    if (isDone(r, c, now)) { done++; if (!last || D(c.start) > last) last = D(c.start); }
+    else if (r.status === 'no_show' && D(c.start) < now) miss++;
+    else if (r.status === 'confirmed' && c.active && D(c.start) >= now) next++;
+  }
+  return { done, miss, next, last };
+}
 const pkg = id => db.packages.find(p => p.id === id);
 const occ = cid => db.reservations.filter(r => r.classId === cid && OCC.includes(r.status));
 const isFuture = c => D(c.start) > new Date();

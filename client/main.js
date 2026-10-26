@@ -51,7 +51,7 @@ function exportCsv(k) {
     const st = { paid: 'Pago', pending: 'Aguardando', refunded: 'Estornado', cancelled: 'Cancelado' };
     download(`vendas-${stamp()}.csv`, toCsv([['Data', 'Pago em', 'Aluna', 'Pacote', 'Valor (R$)', 'Forma', 'Status'], ...db.purchases.map(p => [fWhen(p.createdAt), p.paidAt ? fWhen(p.paidAt) : '', (usr(p.userId) || {}).name, purName(p), centsToReais(p.amount), METHOD[p.billing] || p.billing, st[p.status] || p.status])]), 'text/csv;charset=utf-8');
   } else if (k === 'students') {
-    download(`alunas-${stamp()}.csv`, toCsv([['Nome', 'E-mail', 'WhatsApp', 'Créditos', 'Aulas feitas', 'Faltas', 'Cadastro'], ...students().map(u => [u.name, u.email, fPhone(u.phone), u.credits, db.reservations.filter(r => r.userId === u.id && r.status === 'attended').length, db.reservations.filter(r => r.userId === u.id && r.status === 'no_show').length, fDate(u.createdAt)])]), 'text/csv;charset=utf-8');
+    download(`alunas-${stamp()}.csv`, toCsv([['Nome', 'E-mail', 'WhatsApp', 'Créditos', 'Aulas feitas', 'Faltas', 'Cadastro'], ...students().map(u => [u.name, u.email, fPhone(u.phone), u.credits, classStats(u.id).done, classStats(u.id).miss, fDate(u.createdAt)])]), 'text/csv;charset=utf-8');
   } else {
     const past = db.classes.filter(c => c.active && D(c.start) < new Date()).sort((a, b) => D(b.start) - D(a.start));
     download(`aulas-${stamp()}.csv`, toCsv([['Data', 'Aula', 'Instrutora', 'Bikes', 'Reservas', 'Presentes', 'Faltas', 'Ocupação'], ...past.map(c => { const o = occ(c.id); return [fWhen(c.start), c.title, c.instructor, c.maxBikes, o.length, o.filter(r => r.status === 'attended').length, o.filter(r => r.status === 'no_show').length, Math.round(o.length / c.maxBikes * 100) + '%']; })]), 'text/csv;charset=utf-8');

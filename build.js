@@ -12,7 +12,7 @@ ${logic}
 ${seed}
 module.exports = {
   hooks, get db() { return db; }, setDb(d) { db = d; },
-  DEFAULT_TERMS, DEFAULT_REMINDER, OCC, HOLD_MIN, freshDb, defaultSpecial, PAY_MODES, evPay, evCost, acceptsCredit, acceptsDirect, credTxt,
+  DEFAULT_TERMS, DEFAULT_REMINDER, OCC, HOLD_MIN, freshDb, defaultSpecial, PAY_MODES, hrs, fHrs, lateOn, lateMsg, DEFAULT_LATE_MSG, evPay, evCost, acceptsCredit, acceptsDirect, credTxt,
   esc, uid, num, clean, digits, isValidCpf, maskCpf, fmtCpf, activeOffers, offerOf, seatsLeft, fTime, brl, reaisToCents, centsToReais, D, cap1, fWhen, fDay, fTime, fDate, dayKey, addDays, atHour,
   normPhone, validPhone, fPhone, waLink, fill, shortName, S, cls, usr, pkg, occ, isFuture, isHeld, purName,
   changeSeat, resizeClass, applyStudioToClasses, audit, notify, ledgerAdd, addCredits, expireCredits, seatPlan, reserveSeat,

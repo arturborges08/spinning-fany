@@ -24,7 +24,7 @@ const firstName = n => String(n || '').trim().split(/\s+/)[0] || '';
 def('reserve', 'user', (c, p) => {
   const u = c.user; notBlocked(u); needVerified(u);
   const b = core.reserveSeat(u.id, String(p.classId), { bike: p.bike }), cl = core.cls(String(p.classId));
-  core.notify(u.id, 'Reserva confirmada ✔', `${cl.title} · ${core.fWhen(cl.start)} · sua bike: ${b}. Cancelamento grátis até ${core.S().cancelHours}h antes da aula.`, { noNote: true, button: { label: 'Ver minha aula', path: '/#/conta' } });
+  core.notify(u.id, 'Reserva confirmada ✔', `${cl.title} · ${core.fWhen(cl.start)} · sua bike: ${b}. Cancelamento grátis até ${core.fHrs(core.S().cancelHours)} antes da aula.`, { noNote: true, button: { label: 'Ver minha aula', path: '/#/conta' } });
   return { bike: b, ticket: { classId: String(p.classId), bike: b } };
 });
 def('change', 'user', (c, p) => {
@@ -34,9 +34,12 @@ def('change', 'user', (c, p) => {
 });
 def('cancel', 'user', (c, p) => {
   const r = core.db.reservations.find(x => x.id === p.id), ce = r && core.cls(r.classId);
-  const done = core.releaseSeat(String(p.id), { refund: true, byUser: c.user.id, cutoff: core.S().cancelHours });
+  let done;
+  try { done = core.releaseSeat(String(p.id), { refund: true, byUser: c.user.id, cutoff: core.S().cancelHours, late: p.late === true }); }
+  catch (e) { if (e.code === 'late') return { needLate: true, warn: e.message }; throw e; }
   if (!done) throw new Error('Reserva não encontrada');
-  return { msg: ce && ce.event ? 'Vaga cancelada' : 'Reserva cancelada · crédito devolvido' };
+  if (done === 'late') { core.audit('cancelamento_tardio', `${c.user.name} cancelou fora do prazo: ${ce ? ce.title : ''}`); return { msg: 'Reserva cancelada · o crédito não foi devolvido (fora do prazo)' }; }
+  return { msg: ce && ce.event && !r.paidCredit ? 'Vaga cancelada' : 'Reserva cancelada · crédito devolvido' };
 });
 def('wait', 'user', (c, p) => {
   const u = c.user, db = core.db; notBlocked(u); needVerified(u); const cl = core.cls(String(p.classId));
@@ -268,7 +271,7 @@ def('annPost', 'admin', (c, p) => { const t = str(p.title, 80), b = str(p.body, 
 def('annDel', 'admin', (c, p) => { core.db.announcements = core.db.announcements.filter(a => a.id !== p.id); return { msg: 'Aviso apagado' }; });
 def('studio', 'admin', (c, p) => {
   const s = core.S(), wa = normPhone(p.whatsapp);
-  const vals = { name: str(p.name, 80) || 'Spinning Fany', address: str(p.address, 160), whatsapp: wa || s.whatsapp, instructor: str(p.instructor, 80) || 'Fany', instagram: str(p.instagram, 80), about: str(p.about, 600), duration: num(p.duration, 15, 240, 45), cancelHours: num(p.cancelHours, 0, 72, 2), terms: str(p.terms, 1500) || core.DEFAULT_TERMS, reminder: str(p.reminder, 400) || core.DEFAULT_REMINDER, gifts: p.gifts !== false };
+  const vals = { name: str(p.name, 80) || 'Spinning Fany', address: str(p.address, 160), whatsapp: wa || s.whatsapp, instructor: str(p.instructor, 80) || 'Fany', instagram: str(p.instagram, 80), about: str(p.about, 600), duration: num(p.duration, 15, 240, 45), cancelHours: core.hrs(p.cancelHours, s.cancelHours), lateCancel: p.lateCancel !== false, lateCancelMsg: str(p.lateCancelMsg, 400) || core.DEFAULT_LATE_MSG, terms: str(p.terms, 1500) || core.DEFAULT_TERMS, reminder: str(p.reminder, 400) || core.DEFAULT_REMINDER, gifts: p.gifts !== false };
   Object.assign(s, vals); core.audit('configuracoes', 'estúdio atualizado');
   if (p.applyAll) { const r = core.applyStudioToClasses(null, vals.duration); return { msg: `${r.ok} aula(s) atualizada(s)`, warn: false }; }
   return { msg: 'Estúdio atualizado' };

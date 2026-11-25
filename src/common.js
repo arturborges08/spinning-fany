@@ -14,6 +14,12 @@ const credTxt = n => n + (n === 1 ? ' crédito' : ' créditos');
 /* ── utilidades ── */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+/** prazo em horas aceitando quebrado (0,5 = 30 min); arredonda para 15 min */
+const hrs = (v, d) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? Math.min(72, Math.max(0, Math.round(n * 4) / 4)) : d; };
+const fHrs = h => { h = Number(h) || 0; if (h < 1) return Math.round(h * 60) + ' min'; const H = Math.floor(h), m = Math.round((h - H) * 60); return H + 'h' + (m ? String(m).padStart(2, '0') : ''); };
+const lateOn = () => db.settings.lateCancel !== false;
+const DEFAULT_LATE_MSG = 'Faltam menos de {prazo} para a aula. Se cancelar agora, você perde o crédito desta aula e a bike fica livre para outra pessoa.';
+const lateMsg = () => String(db.settings.lateCancelMsg || DEFAULT_LATE_MSG).replace(/\{prazo\}/g, fHrs(db.settings.cancelHours));
 const num = (v, min, max, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
 const clean = (v, max = 200) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max);
 const digits = s => String(s ?? '').replace(/\D/g, '');

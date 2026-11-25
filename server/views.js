@@ -7,7 +7,7 @@ const userPub = u => ({ id: u.id, deleted: !!u.deleted, name: u.name, email: u.e
 const purPub = p => ({ id: p.id, userId: p.userId, kind: p.kind || 'package', classId: p.classId || null, bike: p.bike || null, pkgId: p.pkgId || null, amount: p.amount, credits: p.credits, status: p.status, billing: p.billing, createdAt: p.createdAt, paidAt: p.paidAt || null, note: p.note || '', expired: !!p.expired, needsAction: !!p.needsAction, checkoutUrl: p.status === 'pending' ? (p.checkoutUrl || '') : '', receiptUrl: p.receiptUrl || '', captureMethod: p.captureMethod || '' });
 
 function settingsPub(s, admin) {
-  const o = { name: s.name, about: s.about, address: s.address, whatsapp: s.whatsapp, instagram: s.instagram || '', maxBikes: s.maxBikes, layoutId: s.layoutId || '', duration: s.duration, cancelHours: s.cancelHours, instructor: s.instructor, terms: s.terms, gifts: s.gifts !== false };
+  const o = { name: s.name, about: s.about, address: s.address, whatsapp: s.whatsapp, instagram: s.instagram || '', maxBikes: s.maxBikes, layoutId: s.layoutId || '', duration: s.duration, cancelHours: s.cancelHours, lateCancel: s.lateCancel !== false, lateCancelMsg: s.lateCancelMsg || '', instructor: s.instructor, terms: s.terms, gifts: s.gifts !== false };
   if (admin) { o.reminder = s.reminder; o.infinitepayHandle = s.infinitepayHandle || ''; }
   return o;
 }

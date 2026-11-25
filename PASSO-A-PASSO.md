@@ -253,3 +253,10 @@ Dica: se mudar a forma de pagamento, revise a **Descrição** da aula (a padrão
 - **Aluna:** no topo do painel aparece **Aulas feitas** ao lado dos créditos e a data da última aula. Em **Minhas aulas** fica o histórico completo (feitas e faltas).
 - **Dona:** na lista de **Alunas** a coluna **Aulas feitas** mostra o total e as faltas. Abrindo a aluna aparecem **Aulas feitas · Faltas · Próximas reservas · Última aula**. Na **Visão geral** tem o ranking **Quem mais treinou** (total e últimos 30 dias). A planilha de alunas também traz esses números.
 - Conta como feita toda aula que já aconteceu em que a aluna estava reservada, marcada como presente ou sem marcação. Se você marcar **Faltou**, ela sai das feitas e entra nas faltas.
+
+## Cancelar fora do prazo
+Em **Estúdio**:
+- **Cancelar grátis até (horas antes)**: dentro desse prazo a aluna cancela e o crédito volta. Aceita meia hora (0,5).
+- **Depois desse prazo, deixar a aluna cancelar mesmo assim**: ligado, a aluna vê **Cancelar (perde o crédito)**. Ao tocar aparece o aviso e os botões **Manter minha aula** / **Cancelar mesmo assim**. Cancelando, o crédito não volta e a bike vai para a primeira da fila. Desligado, ela só consegue falar com o estúdio pelo WhatsApp.
+- **Aviso ao cancelar fora do prazo**: o texto que aparece. Use {prazo} para mostrar o prazo (ex.: "1h").
+Depois que a aula começa, não dá mais para cancelar pelo site.

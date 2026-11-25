@@ -118,7 +118,13 @@ const acts = {
   },
   wait(t) { act('wait', { classId: t.dataset.id }); },
   leavewait(t) { act('leavewait', { classId: t.dataset.id }); },
-  cancel(t) { const id = t.dataset.id, rr = db.reservations.find(x => x.id === id), ce = rr && cls(rr.classId); confirmBox(ce && ce.event && !rr.paidCredit ? 'Cancelar a vaga?' : 'Cancelar essa reserva?', ce && ce.event && !rr.paidCredit ? 'Sua bike será liberada. Você ainda não pagou, então nada será cobrado.' : ((rr && rr.creditCost) > 1 ? `Os ${rr.creditCost} créditos voltam para você.` : 'O crédito volta para você.'), 'Cancelar reserva', () => act('cancel', { id }), true); },
+  cancel(t) {
+    const id = t.dataset.id, rr = db.reservations.find(x => x.id === id), ce = rr && cls(rr.classId);
+    const late = rr && ce && rr.paidCredit && (D(ce.start) - new Date()) / 36e5 < S().cancelHours;
+    const lateBox = msg => dialog({ title: 'Cancelar fora do prazo?', body: msg || lateMsg(), buttons: [{ label: 'Manter minha aula', kind: 'btn-line', fn() { } }, { label: 'Cancelar mesmo assim', kind: 'btn-bad', fn: () => act('cancel', { id, late: true }) }] });
+    if (late) return lateBox();
+    confirmBox(ce && ce.event && !rr.paidCredit ? 'Cancelar a vaga?' : 'Cancelar essa reserva?', ce && ce.event && !rr.paidCredit ? 'Sua bike será liberada. Você ainda não pagou, então nada será cobrado.' : ((rr && rr.creditCost) > 1 ? `Os ${rr.creditCost} créditos voltam para você.` : 'O crédito volta para você.'), 'Cancelar reserva', async () => { const j = await quiet('cancel', { id }); if (j && j.needLate) lateBox(j.warn); else if (j) { toast(j.msg); render(); } }, true);
+  },
   async buy(t) { const j = await act('checkout', { packageId: t.dataset.id }); if (j && j.url) goPay(j.url); },
   async resume(t) { const j = await act('resume', { id: t.dataset.id }); if (j && j.url) goPay(j.url); },
   subcancel(t) { const id = t.dataset.id; confirmBox('Cancelar a mensalidade?', 'Os créditos já pagos continuam valendo.', 'Cancelar mensalidade', () => act('subcancel', { id }), true); },
@@ -236,7 +242,7 @@ const forms = {
   async charge(f) { if (!el(f, 'uid').value) return toast('Escolha a aluna', 'err'); const uid_ = el(f, 'uid').value; const j = await act('charge', { userId: uid_, packageId: el(f, 'pkg').value }); if (j && j.url) showLink(j.url, usr(uid_)); },
   teamadd(f) { act('teamAdd', { name: el(f, 'name').value, email: el(f, 'email').value, password: el(f, 'password').value }).then(j => { if (j) f.reset(); }); },
   studio(f) {
-    const vals = { name: el(f, 'name').value, address: el(f, 'address').value, whatsapp: el(f, 'whatsapp').value, instructor: el(f, 'instructor').value, instagram: el(f, 'instagram').value, about: el(f, 'about').value, duration: el(f, 'duration').value, cancelHours: el(f, 'cancelHours').value, terms: el(f, 'terms').value, reminder: el(f, 'reminder').value, gifts: el(f, 'gifts').checked };
+    const vals = { name: el(f, 'name').value, address: el(f, 'address').value, whatsapp: el(f, 'whatsapp').value, instructor: el(f, 'instructor').value, instagram: el(f, 'instagram').value, about: el(f, 'about').value, duration: el(f, 'duration').value, cancelHours: el(f, 'cancelHours').value, lateCancel: el(f, 'lateCancel').checked, lateCancelMsg: el(f, 'lateCancelMsg').value, terms: el(f, 'terms').value, reminder: el(f, 'reminder').value, gifts: el(f, 'gifts').checked };
     const nd = num(vals.duration, 15, 240, 45), changed = nd !== S().duration;
     const future = db.classes.filter(c => c.active && !c.event && isFuture(c) && c.duration !== nd).length;
     if (changed && future) dialog({ title: 'Aplicar às aulas que já estão na agenda?', body: `Você mudou a duração padrão. Há ${future} aula(s) futura(s) com a duração antiga. (As aulas especiais têm configuração própria, e o desenho/quantidade de bikes é na aba Sala.)`, buttons: [{ label: 'Só para novas aulas', kind: 'btn-line', fn: () => act('studio', { ...vals, applyAll: false }) }, { label: 'Aplicar a todas as futuras', fn: () => act('studio', { ...vals, applyAll: true }) }] });

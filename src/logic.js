@@ -93,7 +93,7 @@ function promoteWaitlist(classId) {
     if (occ(classId).length >= c.maxBikes) break;
     const u = usr(w.userId); if (!u || u.blocked || u.credits < 1) continue;
     let bike; try { bike = reserveSeat(w.userId, classId, { label: 'Vaga da lista de espera' }); } catch (e) { continue; }
-    notify(u.id, 'Você entrou na aula! 🎉', `Abriu uma vaga em ${c.title} (${fWhen(c.start)}) e você era a primeira da lista de espera. Sua bike: ${bike}. Foi usado 1 crédito. Cancelamento grátis até ${S().cancelHours}h antes da aula.`, { important: true, kind: 'waitjoin', ref: classId, button: { label: 'Ver minha aula', path: '/#/conta' } });
+    notify(u.id, 'Você entrou na aula! 🎉', `Abriu uma vaga em ${c.title} (${fWhen(c.start)}) e você era a primeira da lista de espera. Sua bike: ${bike}. Foi usado 1 crédito. Cancelamento grátis até ${fHrs(S().cancelHours)} antes da aula.`, { important: true, kind: 'waitjoin', ref: classId, button: { label: 'Ver minha aula', path: '/#/conta' } });
   }
 }
 /** Ofertas que ninguém confirmou a tempo voltam para a fila (a pessoa sai dela) e a vaga vai para a próxima. */
@@ -123,11 +123,21 @@ function releaseSeat(resId, o = {}) {
     const pu = db.purchases.find(p => p.id === r.pay); if (pu && pu.status === 'pending') pu.status = 'cancelled';
     return true;
   }
-  if (o.cutoff != null && c) { const h = (D(c.start) - Date.now()) / 36e5; if (h < o.cutoff) throw new Error(`Cancelamento só até ${o.cutoff}h antes da aula. Fale com o estúdio pelo WhatsApp.`); }
-  r.status = 'cancelled'; r.bike = null;
-  if (o.refund && r.paidCredit) addCredits(r.userId, r.creditCost || 1, 'refund', `Cancelamento: ${c ? c.title : 'aula'}`, r.id);
+  let late = false;
+  if (o.cutoff != null && c) {
+    const h = (D(c.start) - Date.now()) / 36e5;
+    if (o.byUser && h <= 0) throw new Error('A aula já começou. Fale com o estúdio pelo WhatsApp.');
+    if (h < o.cutoff) {
+      if (!lateOn()) throw new Error(`Cancelamento só até ${fHrs(o.cutoff)} antes da aula. Fale com o estúdio pelo WhatsApp.`);
+      if (!o.late) { const e = new Error(lateMsg()); e.code = 'late'; throw e; }
+      late = true;
+    }
+  }
+  r.status = 'cancelled'; r.bike = null; if (late) { r.lateCancel = true; r.lateAt = new Date().toISOString(); }
+  if (late && r.paidCredit) ledgerAdd(r.userId, 0, 'late_cancel', `Cancelou fora do prazo (crédito não devolvido): ${c ? c.title : 'aula'}`, r.id);
+  if (o.refund && r.paidCredit && !late) addCredits(r.userId, r.creditCost || 1, 'refund', `Cancelamento: ${c ? c.title : 'aula'}`, r.id);
   promoteWaitlist(r.classId);
-  return true;
+  return late ? 'late' : true;
 }
 function newPurchase(userId, pkgId, billing, extra = {}) {
   const p = pkg(pkgId); if (!p) throw new Error('Pacote não encontrado');

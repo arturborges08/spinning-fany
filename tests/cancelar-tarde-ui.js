@@ -1,0 +1,35 @@
+// Navegador: cancelar fora do prazo + configuração no Estúdio
+const { chromium } = require('/home/claude/.npm-global/lib/node_modules/playwright');
+const { start } = require('./harness');
+let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
+(async () => {
+  const h = await start({ port: 4660, mock: 4661 }); const B = await chromium.launch(); const errors = [];
+  const mk = async (w, hh) => { const ctx = await B.newContext({ viewport: { width: w, height: hh }, deviceScaleFactor: 2 }); const p = await ctx.newPage(); p.on('pageerror', e => errors.push('PAGEERROR ' + e.message)); p.on('console', m => { if (m.type() === 'error' && !/ERR_|Failed to load resource|net::/.test(m.text())) errors.push('CONSOLE ' + m.text()); }); p.on('dialog', d => { errors.push('DIALOG nativo ' + d.message()); d.dismiss(); }); return p; };
+  const sleep = (p, ms) => p.waitForTimeout(ms);
+  const shot = async (p, n) => { await sleep(p, 300); await p.screenshot({ path: `/tmp/k_${n}.png` }); };
+  const toast = p => p.evaluate(() => [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | '));
+  const dlg = async (p, label) => { await p.waitForSelector('.modal [data-act=dlg]'); await p.locator('.modal [data-act=dlg]', { hasText: label }).click(); await sleep(p, 250); };
+  const login = async (p, email, pw) => { await p.goto(h.base + '/#/entrar'); await p.waitForSelector('form[data-form=login]'); await p.fill('form[data-form=login] input[name=email]', email); await p.fill('form[data-form=login] input[name=password]', pw); await p.click('form[data-form=login] button[type=submit]'); };
+  const post = (p, path, body) => p.evaluate(([a, b]) => fetch('/api/act/' + a, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json()), [path, body]);
+  const state = p => p.evaluate(() => fetch('/api/state').then(r => r.json()));
+  const dona = await mk(1280, 900); await login(dona, 'dona@fany.com', 'senhaForte123');
+  await dona.click('[data-act=atab][data-t=estudio]'); await dona.waitForSelector('form[data-form=studio]');
+  const f = dona.locator('form[data-form=studio]');
+  ok(await f.locator('input[name=lateCancel]').isChecked() && (await f.locator('textarea[name=lateCancelMsg]').inputValue()).includes('{prazo}'), 'Estúdio mostra a opção e o texto do aviso (editável)');
+  await f.locator('input[name=cancelHours]').fill('1'); await f.locator('textarea[name=lateCancelMsg]').fill('Faltam menos de {prazo} pra aula. Cancelando agora você perde o crédito.');
+  await f.locator('button[type=submit]').click(); await sleep(dona, 600); await shot(dona, 'estudio');
+  let st = await state(dona); ok(st.db.settings.cancelHours === 1 && /pra aula/.test(st.db.settings.lateCancelMsg), 'dona salvou prazo 1h e o texto novo');
+  const cid = (await post(dona, 'classSave', { title: 'Aula daqui a pouco', instructor: 'Fany', start: new Date(Date.now() + 30 * 6e4).toISOString(), duration: 45, level: 'x', notes: '' })).state.db.classes.find(c => c.title === 'Aula daqui a pouco').id;
+  const al = await mk(390, 844); await al.goto(h.base + '/'); await al.evaluate(() => fetch('/api/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Ana Souza', email: 'ana@x.com', phone: '(18) 99111-0001', cpf: '529.982.247-25', password: 'minhasenha1', acceptTerms: true }) }));
+  st = await state(dona); const aid = st.db.users.find(u => u.email === 'ana@x.com').id; await post(dona, 'adjust', { userId: aid, amount: 2, reason: 't' });
+  await al.evaluate(() => fetch('/api/logout', { method: 'POST' })); await login(al, 'ana@x.com', 'minhasenha1'); await al.waitForSelector('[data-stat=credits]'); await post(al, 'reserve', { classId: cid, bike: 2 }); await al.reload(); await al.waitForSelector('[data-stat=credits]');
+  await al.locator('[data-act=stab][data-t=minhas]').click(); await sleep(al, 300);
+  const btn = al.locator('[data-act=cancel]').first(); ok((await btn.innerText()).includes('perde o crédito'), 'faltando 30 min a aluna vê "Cancelar (perde o crédito)"');
+  await btn.click(); await al.waitForSelector('.modal'); const m = await al.locator('.modal').innerText();
+  ok(/Cancelar fora do prazo/.test(m) && /Faltam menos de 1h pra aula/.test(m) && /Cancelar mesmo assim/.test(m) && /Manter minha aula/.test(m), 'aparece o aviso com o texto da dona e "Cancelar mesmo assim"'); await shot(al, 'aviso');
+  await dlg(al, 'Manter minha aula'); ok((await state(al)).db.reservations.some(r => r.classId === cid && r.status === 'confirmed'), '"Manter minha aula" não cancela');
+  await al.locator('[data-act=cancel]').first().click(); await al.waitForSelector('.modal'); await dlg(al, 'Cancelar mesmo assim'); await sleep(al, 600);
+  st = await state(al); ok(!st.db.reservations.some(r => r.classId === cid && r.status === 'confirmed') && st.db.users[0].credits === 1, 'cancelou e o crédito não voltou (2 → 1)');
+  ok(/não foi devolvido/.test(await toast(al)), 'mensagem avisa que o crédito não voltou');
+  console.log('\nERROS NO NAVEGADOR:', errors.length ? errors : 'nenhum'); console.log(fails ? `\n${fails} FALHA(S)` : '\nTUDO OK'); await B.close(); h.stop(); process.exit(fails || errors.length ? 1 : 0);
+})().catch(e => { console.error('EXCEÇÃO', e.message.split('\n').slice(0, 6).join('\n')); process.exit(1); });

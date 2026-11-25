@@ -18,6 +18,12 @@ const credTxt = n => n + (n === 1 ? ' crédito' : ' créditos');
 /* ── utilidades ── */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+/** prazo em horas aceitando quebrado (0,5 = 30 min); arredonda para 15 min */
+const hrs = (v, d) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? Math.min(72, Math.max(0, Math.round(n * 4) / 4)) : d; };
+const fHrs = h => { h = Number(h) || 0; if (h < 1) return Math.round(h * 60) + ' min'; const H = Math.floor(h), m = Math.round((h - H) * 60); return H + 'h' + (m ? String(m).padStart(2, '0') : ''); };
+const lateOn = () => db.settings.lateCancel !== false;
+const DEFAULT_LATE_MSG = 'Faltam menos de {prazo} para a aula. Se cancelar agora, você perde o crédito desta aula e a bike fica livre para outra pessoa.';
+const lateMsg = () => String(db.settings.lateCancelMsg || DEFAULT_LATE_MSG).replace(/\{prazo\}/g, fHrs(db.settings.cancelHours));
 const num = (v, min, max, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
 const clean = (v, max = 200) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max);
 const digits = s => String(s ?? '').replace(/\D/g, '');
@@ -225,7 +231,7 @@ function promoteWaitlist(classId) {
     if (occ(classId).length >= c.maxBikes) break;
     const u = usr(w.userId); if (!u || u.blocked || u.credits < 1) continue;
     let bike; try { bike = reserveSeat(w.userId, classId, { label: 'Vaga da lista de espera' }); } catch (e) { continue; }
-    notify(u.id, 'Você entrou na aula! 🎉', `Abriu uma vaga em ${c.title} (${fWhen(c.start)}) e você era a primeira da lista de espera. Sua bike: ${bike}. Foi usado 1 crédito. Cancelamento grátis até ${S().cancelHours}h antes da aula.`, { important: true, kind: 'waitjoin', ref: classId, button: { label: 'Ver minha aula', path: '/#/conta' } });
+    notify(u.id, 'Você entrou na aula! 🎉', `Abriu uma vaga em ${c.title} (${fWhen(c.start)}) e você era a primeira da lista de espera. Sua bike: ${bike}. Foi usado 1 crédito. Cancelamento grátis até ${fHrs(S().cancelHours)} antes da aula.`, { important: true, kind: 'waitjoin', ref: classId, button: { label: 'Ver minha aula', path: '/#/conta' } });
   }
 }
 /** Ofertas que ninguém confirmou a tempo voltam para a fila (a pessoa sai dela) e a vaga vai para a próxima. */
@@ -255,11 +261,21 @@ function releaseSeat(resId, o = {}) {
     const pu = db.purchases.find(p => p.id === r.pay); if (pu && pu.status === 'pending') pu.status = 'cancelled';
     return true;
   }
-  if (o.cutoff != null && c) { const h = (D(c.start) - Date.now()) / 36e5; if (h < o.cutoff) throw new Error(`Cancelamento só até ${o.cutoff}h antes da aula. Fale com o estúdio pelo WhatsApp.`); }
-  r.status = 'cancelled'; r.bike = null;
-  if (o.refund && r.paidCredit) addCredits(r.userId, r.creditCost || 1, 'refund', `Cancelamento: ${c ? c.title : 'aula'}`, r.id);
+  let late = false;
+  if (o.cutoff != null && c) {
+    const h = (D(c.start) - Date.now()) / 36e5;
+    if (o.byUser && h <= 0) throw new Error('A aula já começou. Fale com o estúdio pelo WhatsApp.');
+    if (h < o.cutoff) {
+      if (!lateOn()) throw new Error(`Cancelamento só até ${fHrs(o.cutoff)} antes da aula. Fale com o estúdio pelo WhatsApp.`);
+      if (!o.late) { const e = new Error(lateMsg()); e.code = 'late'; throw e; }
+      late = true;
+    }
+  }
+  r.status = 'cancelled'; r.bike = null; if (late) { r.lateCancel = true; r.lateAt = new Date().toISOString(); }
+  if (late && r.paidCredit) ledgerAdd(r.userId, 0, 'late_cancel', `Cancelou fora do prazo (crédito não devolvido): ${c ? c.title : 'aula'}`, r.id);
+  if (o.refund && r.paidCredit && !late) addCredits(r.userId, r.creditCost || 1, 'refund', `Cancelamento: ${c ? c.title : 'aula'}`, r.id);
   promoteWaitlist(r.classId);
-  return true;
+  return late ? 'late' : true;
 }
 function newPurchase(userId, pkgId, billing, extra = {}) {
   const p = pkg(pkgId); if (!p) throw new Error('Pacote não encontrado');
@@ -544,7 +560,7 @@ function freshDb() {
 
 module.exports = {
   hooks, get db() { return db; }, setDb(d) { db = d; },
-  DEFAULT_TERMS, DEFAULT_REMINDER, OCC, HOLD_MIN, freshDb, defaultSpecial, PAY_MODES, evPay, evCost, acceptsCredit, acceptsDirect, credTxt,
+  DEFAULT_TERMS, DEFAULT_REMINDER, OCC, HOLD_MIN, freshDb, defaultSpecial, PAY_MODES, hrs, fHrs, lateOn, lateMsg, DEFAULT_LATE_MSG, evPay, evCost, acceptsCredit, acceptsDirect, credTxt,
   esc, uid, num, clean, digits, isValidCpf, maskCpf, fmtCpf, activeOffers, offerOf, seatsLeft, fTime, brl, reaisToCents, centsToReais, D, cap1, fWhen, fDay, fTime, fDate, dayKey, addDays, atHour,
   normPhone, validPhone, fPhone, waLink, fill, shortName, S, cls, usr, pkg, occ, isFuture, isHeld, purName,
   changeSeat, resizeClass, applyStudioToClasses, audit, notify, ledgerAdd, addCredits, expireCredits, seatPlan, reserveSeat,
